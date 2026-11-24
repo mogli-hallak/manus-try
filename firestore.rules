@@ -1,0 +1,766 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Core helper primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidFriendCode(code) {
+      return code is string && code.size() >= 4 && code.size() <= 16 && code.matches('^[A-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getRoom(roomId) {
+      return get(/databases/$(database)/documents/rooms/$(roomId));
+    }
+
+    function roomExists(roomId) {
+      return exists(/databases/$(database)/documents/rooms/$(roomId));
+    }
+
+    function isRoomOpen(roomId) {
+      return roomExists(roomId) && getRoom(roomId).data.status == 'open';
+    }
+
+    function isRoomCreator(roomId) {
+      return isSignedIn() && roomExists(roomId) && getRoom(roomId).data.creatorId == request.auth.uid;
+    }
+
+    function getGroup(groupId) {
+      return get(/databases/$(database)/documents/groups/$(groupId));
+    }
+
+    function groupExists(groupId) {
+      return exists(/databases/$(database)/documents/groups/$(groupId));
+    }
+
+    function isGroupCreator(groupId) {
+      return isSignedIn() && groupExists(groupId) && getGroup(groupId).data.creatorId == request.auth.uid;
+    }
+
+    // Entity validation blueprints
+    function isValidRoom(data) {
+      return data.keys().hasAll([
+          'id', 'creatorId', 'creatorName', 'title', 'category',
+          'mode', 'status', 'durationMinutes', 'endsAt', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'creatorId', 'creatorName', 'title', 'category',
+          'mode', 'status', 'durationMinutes', 'endsAt',
+          'selectedTimeSlotId', 'selectedCardId', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.creatorId is string && data.creatorId.size() >= 1 && data.creatorId.size() <= 128
+        && data.creatorName is string && data.creatorName.size() >= 1 && data.creatorName.size() <= 40
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 80
+        && data.category in ['food', 'movie', 'activity']
+        && data.mode in ['full', 'quick']
+        && data.status in ['open', 'locked']
+        && data.durationMinutes is number && data.durationMinutes >= 1 && data.durationMinutes <= 1440
+        && data.endsAt is number && data.endsAt > 0
+        && (!('selectedTimeSlotId' in data) || data.selectedTimeSlotId == null || (data.selectedTimeSlotId is string && data.selectedTimeSlotId.size() <= 128))
+        && (!('selectedCardId' in data) || data.selectedCardId == null || (data.selectedCardId is string && data.selectedCardId.size() <= 128))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidParticipant(data) {
+      return data.keys().hasAll([
+          'uid', 'roomId', 'name', 'initials', 'avatarTone', 'isGoogleUser', 'joinedAt', 'lastSeenAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'roomId', 'name', 'initials', 'avatarTone', 'isGoogleUser', 'joinedAt', 'lastSeenAt'
+        ])
+        && data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128
+        && isValidId(data.roomId)
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 40
+        && data.initials is string && data.initials.size() >= 1 && data.initials.size() <= 4
+        && data.avatarTone is string && data.avatarTone.size() >= 1 && data.avatarTone.size() <= 40
+        && data.isGoogleUser is bool
+        && data.joinedAt is timestamp
+        && data.lastSeenAt is timestamp;
+    }
+
+    function isValidTimeOption(data) {
+      return data.keys().hasAll([
+          'id', 'roomId', 'label', 'dateIso', 'startTime', 'createdBy', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'roomId', 'label', 'dateIso', 'startTime', 'createdBy', 'createdAt'
+        ])
+        && isValidId(data.id)
+        && isValidId(data.roomId)
+        && data.label is string && data.label.size() >= 1 && data.label.size() <= 60
+        && data.dateIso is string && data.dateIso.size() <= 20
+        && data.startTime is string && data.startTime.size() <= 10
+        && data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128
+        && data.createdAt is timestamp;
+    }
+
+    function isValidTimeVote(data) {
+      return data.keys().hasAll(['uid', 'roomId', 'slotIds', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'roomId', 'slotIds', 'updatedAt'])
+        && data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128
+        && isValidId(data.roomId)
+        && data.slotIds is list && data.slotIds.size() <= 30
+        && (data.slotIds.size() == 0 || (data.slotIds[0] is string && data.slotIds[0].size() >= 1 && data.slotIds[0].size() <= 128))
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCustomCard(data) {
+      return data.keys().hasAll([
+          'id', 'roomId', 'category', 'title', 'subtitle', 'description',
+          'metaTag', 'createdBy', 'createdByName', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'roomId', 'category', 'title', 'subtitle', 'description',
+          'metaTag', 'createdBy', 'createdByName', 'createdAt'
+        ])
+        && isValidId(data.id)
+        && isValidId(data.roomId)
+        && data.category in ['food', 'movie', 'activity']
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 80
+        && data.subtitle is string && data.subtitle.size() >= 1 && data.subtitle.size() <= 60
+        && data.description is string && data.description.size() >= 1 && data.description.size() <= 200
+        && data.metaTag is string && data.metaTag.size() >= 1 && data.metaTag.size() <= 30
+        && data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128
+        && data.createdByName is string && data.createdByName.size() >= 1 && data.createdByName.size() <= 40
+        && data.createdAt is timestamp;
+    }
+
+    function isValidSwipeRecord(data) {
+      return data.keys().hasAll(['uid', 'roomId', 'choices', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'roomId', 'choices', 'updatedAt'])
+        && data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128
+        && isValidId(data.roomId)
+        && data.choices is map && data.choices.size() <= 150
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidChecklistItem(data) {
+      return data.keys().hasAll([
+          'id', 'roomId', 'label', 'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'roomId', 'label', 'claimedByUid', 'claimedByName', 'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isValidId(data.roomId)
+        && data.label is string && data.label.size() >= 1 && data.label.size() <= 80
+        && (!('claimedByUid' in data) || data.claimedByUid == null || (data.claimedByUid is string && data.claimedByUid.size() >= 1 && data.claimedByUid.size() <= 128))
+        && (!('claimedByName' in data) || data.claimedByName == null || (data.claimedByName is string && data.claimedByName.size() >= 1 && data.claimedByName.size() <= 40))
+        && data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll([
+          'uid', 'displayName', 'bio', 'city', 'friendCode', 'initials', 'avatarTone',
+          'defaultCategory', 'defaultDurationMinutes', 'notifyMeetingStarting',
+          'notifyDecisionFinalized', 'notifyChecklistAdded', 'showCityOnPublicCard',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'displayName', 'bio', 'city', 'friendCode', 'initials', 'avatarTone',
+          'defaultCategory', 'defaultDurationMinutes', 'notifyMeetingStarting',
+          'notifyDecisionFinalized', 'notifyChecklistAdded', 'showCityOnPublicCard',
+          'createdAt', 'updatedAt'
+        ])
+        && data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 40
+        && data.bio is string && data.bio.size() <= 160
+        && data.city is string && data.city.size() <= 50
+        && isValidFriendCode(data.friendCode)
+        && data.initials is string && data.initials.size() >= 1 && data.initials.size() <= 4
+        && data.avatarTone is string && data.avatarTone.size() >= 1 && data.avatarTone.size() <= 40
+        && data.defaultCategory in ['food', 'movie', 'activity']
+        && data.defaultDurationMinutes is number && data.defaultDurationMinutes >= 1 && data.defaultDurationMinutes <= 1440
+        && data.notifyMeetingStarting is bool
+        && data.notifyDecisionFinalized is bool
+        && data.notifyChecklistAdded is bool
+        && data.showCityOnPublicCard is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPublicProfile(data) {
+      return data.keys().hasAll([
+          'friendCode', 'uid', 'displayName', 'initials', 'avatarTone', 'bio', 'city', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'friendCode', 'uid', 'displayName', 'initials', 'avatarTone', 'bio', 'city', 'updatedAt'
+        ])
+        && isValidFriendCode(data.friendCode)
+        && data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 40
+        && data.initials is string && data.initials.size() >= 1 && data.initials.size() <= 4
+        && data.avatarTone is string && data.avatarTone.size() >= 1 && data.avatarTone.size() <= 40
+        && data.bio is string && data.bio.size() <= 160
+        && data.city is string && data.city.size() <= 50
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidFriendRequest(data) {
+      return data.keys().hasAll([
+          'id', 'fromUid', 'fromName', 'fromInitials', 'fromAvatarTone', 'fromFriendCode',
+          'toUid', 'toName', 'toFriendCode', 'status', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'fromUid', 'fromName', 'fromInitials', 'fromAvatarTone', 'fromFriendCode',
+          'toUid', 'toName', 'toFriendCode', 'status', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.fromUid is string && data.fromUid.size() >= 1 && data.fromUid.size() <= 128
+        && data.fromName is string && data.fromName.size() >= 1 && data.fromName.size() <= 40
+        && data.fromInitials is string && data.fromInitials.size() >= 1 && data.fromInitials.size() <= 4
+        && data.fromAvatarTone is string && data.fromAvatarTone.size() >= 1 && data.fromAvatarTone.size() <= 40
+        && isValidFriendCode(data.fromFriendCode)
+        && data.toUid is string && data.toUid.size() >= 1 && data.toUid.size() <= 128
+        && data.toName is string && data.toName.size() >= 1 && data.toName.size() <= 40
+        && isValidFriendCode(data.toFriendCode)
+        && data.status in ['pending', 'accepted', 'declined']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSavedFriend(data) {
+      return data.keys().hasAll([
+          'ownerUid', 'friendUid', 'displayName', 'initials', 'avatarTone',
+          'friendCode', 'nickname', 'favorite', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerUid', 'friendUid', 'displayName', 'initials', 'avatarTone',
+          'friendCode', 'nickname', 'favorite', 'createdAt', 'updatedAt'
+        ])
+        && data.ownerUid is string && data.ownerUid.size() >= 1 && data.ownerUid.size() <= 128
+        && isValidId(data.friendUid)
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 40
+        && data.initials is string && data.initials.size() >= 1 && data.initials.size() <= 4
+        && data.avatarTone is string && data.avatarTone.size() >= 1 && data.avatarTone.size() <= 40
+        && data.friendCode is string && data.friendCode.size() <= 16
+        && data.nickname is string && data.nickname.size() <= 40
+        && data.favorite is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidFriendGroup(data) {
+      return data.keys().hasAll([
+          'id', 'creatorId', 'creatorName', 'name', 'description',
+          'defaultCategory', 'memberUids', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'creatorId', 'creatorName', 'name', 'description',
+          'defaultCategory', 'memberUids', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.creatorId is string && data.creatorId.size() >= 1 && data.creatorId.size() <= 128
+        && data.creatorName is string && data.creatorName.size() >= 1 && data.creatorName.size() <= 40
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 60
+        && data.description is string && data.description.size() <= 160
+        && data.defaultCategory in ['food', 'movie', 'activity']
+        && data.memberUids is list && data.memberUids.size() >= 1 && data.memberUids.size() <= 30
+        && data.memberUids[0] is string && data.memberUids[0].size() >= 1 && data.memberUids[0].size() <= 128
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidGroupMember(data) {
+      return data.keys().hasAll([
+          'uid', 'groupId', 'displayName', 'initials', 'avatarTone', 'role', 'joinedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'groupId', 'displayName', 'initials', 'avatarTone', 'role', 'joinedAt'
+        ])
+        && isValidId(data.uid)
+        && isValidId(data.groupId)
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 40
+        && data.initials is string && data.initials.size() >= 1 && data.initials.size() <= 4
+        && data.avatarTone is string && data.avatarTone.size() >= 1 && data.avatarTone.size() <= 40
+        && data.role in ['admin', 'member']
+        && data.joinedAt is timestamp;
+    }
+
+    // Collection: users (Private profile & preferences + owner-managed friends list)
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.uid == request.auth.uid;
+
+      allow create: if isSignedIn()
+        && isValidId(userId)
+        && userId == request.auth.uid
+        && isValidUserProfile(incoming())
+        && incoming().uid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isSignedIn()
+        && isValidId(userId)
+        && userId == request.auth.uid
+        && isValidUserProfile(incoming())
+        && existing().uid == request.auth.uid
+        && incoming().uid == existing().uid
+        && incoming().friendCode == existing().friendCode
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'displayName', 'bio', 'city', 'initials', 'avatarTone',
+          'defaultCategory', 'defaultDurationMinutes',
+          'notifyMeetingStarting', 'notifyDecisionFinalized', 'notifyChecklistAdded',
+          'showCityOnPublicCard', 'updatedAt'
+        ]);
+
+      allow delete: if isSignedIn() && isValidId(userId) && userId == request.auth.uid;
+
+      match /friends/{friendId} {
+        allow get: if isSignedIn() && isValidId(userId) && isValidId(friendId) && userId == request.auth.uid;
+        allow list: if isSignedIn() && resource.data.ownerUid == request.auth.uid && userId == request.auth.uid;
+
+        allow create: if isSignedIn()
+          && isValidId(userId)
+          && isValidId(friendId)
+          && userId == request.auth.uid
+          && isValidSavedFriend(incoming())
+          && incoming().ownerUid == request.auth.uid
+          && incoming().friendUid == friendId
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+
+        allow update: if isSignedIn()
+          && isValidId(userId)
+          && isValidId(friendId)
+          && userId == request.auth.uid
+          && isValidSavedFriend(incoming())
+          && existing().ownerUid == request.auth.uid
+          && incoming().ownerUid == existing().ownerUid
+          && incoming().friendUid == existing().friendUid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'displayName', 'initials', 'avatarTone', 'friendCode',
+            'nickname', 'favorite', 'updatedAt'
+          ]);
+
+        allow delete: if isSignedIn() && isValidId(userId) && isValidId(friendId) && userId == request.auth.uid;
+      }
+    }
+
+    // Collection: publicProfiles (Non-PII public lookup card keyed by friendCode)
+    match /publicProfiles/{friendCode} {
+      allow get: if isSignedIn() && isValidFriendCode(friendCode);
+      allow list: if isSignedIn() && resource.data.uid == request.auth.uid;
+
+      allow create: if isSignedIn()
+        && isValidFriendCode(friendCode)
+        && isValidPublicProfile(incoming())
+        && incoming().friendCode == friendCode
+        && incoming().uid == request.auth.uid
+        && incoming().updatedAt == request.time;
+
+      allow update: if isSignedIn()
+        && isValidFriendCode(friendCode)
+        && isValidPublicProfile(incoming())
+        && existing().uid == request.auth.uid
+        && incoming().uid == existing().uid
+        && incoming().friendCode == existing().friendCode
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'displayName', 'initials', 'avatarTone', 'bio', 'city', 'updatedAt'
+        ]);
+
+      allow delete: if isSignedIn() && isValidFriendCode(friendCode) && existing().uid == request.auth.uid;
+    }
+
+    // Collection: friendRequests
+    match /friendRequests/{requestId} {
+      allow get: if isSignedIn() && isValidId(requestId)
+        && (existing().fromUid == request.auth.uid || existing().toUid == request.auth.uid);
+      allow list: if isSignedIn()
+        && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid);
+
+      allow create: if isSignedIn()
+        && isValidId(requestId)
+        && isValidFriendRequest(incoming())
+        && requestId == (incoming().fromUid + '_' + incoming().toUid)
+        && incoming().fromUid == request.auth.uid
+        && incoming().toUid != request.auth.uid
+        && incoming().status == 'pending'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isSignedIn()
+        && isValidId(requestId)
+        && isValidFriendRequest(incoming())
+        && incoming().id == existing().id
+        && incoming().fromUid == existing().fromUid
+        && incoming().toUid == existing().toUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (existing().toUid == request.auth.uid
+            && existing().status == 'pending'
+            && incoming().status in ['accepted', 'declined']
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']))
+          ||
+          (existing().fromUid == request.auth.uid
+            && existing().status == 'declined'
+            && incoming().status == 'pending'
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'status', 'fromName', 'fromInitials', 'fromAvatarTone', 'updatedAt'
+            ]))
+        );
+
+      allow delete: if isSignedIn() && isValidId(requestId)
+        && (existing().fromUid == request.auth.uid || existing().toUid == request.auth.uid);
+    }
+
+    // Collection: groups
+    match /groups/{groupId} {
+      allow get: if isSignedIn() && isValidId(groupId);
+      allow list: if isSignedIn() && (request.auth.uid in resource.data.memberUids);
+
+      allow create: if isSignedIn()
+        && isValidId(groupId)
+        && isValidFriendGroup(incoming())
+        && incoming().id == groupId
+        && incoming().creatorId == request.auth.uid
+        && (request.auth.uid in incoming().memberUids)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isSignedIn()
+        && isValidId(groupId)
+        && isValidFriendGroup(incoming())
+        && incoming().id == existing().id
+        && incoming().creatorId == existing().creatorId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action 1: Creator updates group metadata or memberUids
+          (existing().creatorId == request.auth.uid
+            && (existing().creatorId in incoming().memberUids)
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'name', 'description', 'defaultCategory', 'memberUids', 'updatedAt'
+            ]))
+          ||
+          // Action 2: Self-join via group invite code/link
+          (!(request.auth.uid in existing().memberUids)
+            && (request.auth.uid in incoming().memberUids)
+            && incoming().memberUids.hasAll(existing().memberUids)
+            && incoming().memberUids.size() == existing().memberUids.size() + 1
+            && incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']))
+          ||
+          // Action 3: Member leaves group
+          ((request.auth.uid in existing().memberUids)
+            && existing().creatorId != request.auth.uid
+            && !(request.auth.uid in incoming().memberUids)
+            && existing().memberUids.hasAll(incoming().memberUids)
+            && incoming().memberUids.size() == existing().memberUids.size() - 1
+            && incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']))
+        );
+
+      allow delete: if isSignedIn()
+        && isValidId(groupId)
+        && existing().creatorId == request.auth.uid;
+
+      match /members/{memberId} {
+        allow get: if isSignedIn() && isValidId(groupId) && isValidId(memberId)
+          && groupExists(groupId)
+          && (request.auth.uid in getGroup(groupId).data.memberUids);
+        allow list: if isSignedIn() && resource.data.groupId == groupId;
+
+        allow create: if isSignedIn()
+          && isValidId(groupId)
+          && isValidId(memberId)
+          && isValidGroupMember(incoming())
+          && incoming().uid == memberId
+          && incoming().groupId == groupId
+          && incoming().joinedAt == request.time
+          && (
+            (isGroupCreator(groupId) && incoming().role in ['admin', 'member'])
+            ||
+            (memberId == request.auth.uid
+              && incoming().role == 'member'
+              && (request.auth.uid in getAfter(/databases/$(database)/documents/groups/$(groupId)).data.memberUids))
+          );
+
+        allow update: if isSignedIn()
+          && isValidId(groupId)
+          && isValidId(memberId)
+          && memberId == request.auth.uid
+          && isValidGroupMember(incoming())
+          && existing().uid == request.auth.uid
+          && incoming().uid == existing().uid
+          && incoming().groupId == existing().groupId
+          && incoming().role == existing().role
+          && incoming().joinedAt == existing().joinedAt
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'displayName', 'initials', 'avatarTone'
+          ]);
+
+        allow delete: if isSignedIn()
+          && isValidId(groupId)
+          && isValidId(memberId)
+          && ((existing().uid == request.auth.uid && !isGroupCreator(groupId)) || isGroupCreator(groupId));
+      }
+    }
+
+    // Collection: rooms
+    match /rooms/{roomId} {
+      allow get: if isSignedIn() && isValidId(roomId);
+      allow list: if isSignedIn() && resource.data.creatorId == request.auth.uid;
+
+      allow create: if isSignedIn()
+        && isValidId(roomId)
+        && isValidRoom(incoming())
+        && incoming().id == roomId
+        && incoming().creatorId == request.auth.uid
+        && incoming().status == 'open'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isSignedIn()
+        && isValidId(roomId)
+        && isValidRoom(incoming())
+        && existing().status == 'open'
+        && incoming().id == existing().id
+        && incoming().creatorId == existing().creatorId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action 1: Creator updates lock status, selected decision, or extends timer
+          (existing().creatorId == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'status', 'selectedTimeSlotId', 'selectedCardId', 'endsAt', 'updatedAt'
+            ]))
+          ||
+          // Action 2: Automatic expiry lock once timer reaches endsAt
+          (request.time.toMillis() >= existing().endsAt
+            && incoming().status == 'locked'
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']))
+        );
+
+      allow delete: if isSignedIn()
+        && isValidId(roomId)
+        && existing().creatorId == request.auth.uid;
+
+      // Subcollection: participants
+      match /participants/{participantId} {
+        allow get: if isSignedIn() && isValidId(roomId) && isValidId(participantId) && roomExists(roomId);
+        allow list: if isSignedIn() && resource.data.roomId == roomId;
+
+        allow create: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(participantId)
+          && participantId == request.auth.uid
+          && isValidParticipant(incoming())
+          && incoming().uid == request.auth.uid
+          && incoming().roomId == roomId
+          && incoming().joinedAt == request.time
+          && incoming().lastSeenAt == request.time
+          && isRoomOpen(roomId);
+
+        allow update: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(participantId)
+          && participantId == request.auth.uid
+          && isValidParticipant(incoming())
+          && existing().uid == request.auth.uid
+          && incoming().uid == existing().uid
+          && incoming().roomId == existing().roomId
+          && incoming().joinedAt == existing().joinedAt
+          && incoming().lastSeenAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'name', 'initials', 'avatarTone', 'isGoogleUser', 'lastSeenAt'
+          ])
+          && isRoomOpen(roomId);
+
+        allow delete: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(participantId)
+          && (existing().uid == request.auth.uid || isRoomCreator(roomId));
+      }
+
+      // Subcollection: timeOptions
+      match /timeOptions/{slotId} {
+        allow get: if isSignedIn() && isValidId(roomId) && isValidId(slotId) && roomExists(roomId);
+        allow list: if isSignedIn() && resource.data.roomId == roomId;
+
+        allow create: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(slotId)
+          && isValidTimeOption(incoming())
+          && incoming().id == slotId
+          && incoming().roomId == roomId
+          && incoming().createdBy == request.auth.uid
+          && incoming().createdAt == request.time
+          && isRoomOpen(roomId);
+
+        allow update: if false;
+
+        allow delete: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(slotId)
+          && (existing().createdBy == request.auth.uid || isRoomCreator(roomId))
+          && isRoomOpen(roomId);
+      }
+
+      // Subcollection: timeVotes
+      match /timeVotes/{voterId} {
+        allow get: if isSignedIn() && isValidId(roomId) && isValidId(voterId) && roomExists(roomId);
+        allow list: if isSignedIn() && resource.data.roomId == roomId;
+
+        allow create: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(voterId)
+          && voterId == request.auth.uid
+          && isValidTimeVote(incoming())
+          && incoming().uid == request.auth.uid
+          && incoming().roomId == roomId
+          && incoming().updatedAt == request.time
+          && isRoomOpen(roomId);
+
+        allow update: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(voterId)
+          && voterId == request.auth.uid
+          && isValidTimeVote(incoming())
+          && existing().uid == request.auth.uid
+          && incoming().uid == existing().uid
+          && incoming().roomId == existing().roomId
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['slotIds', 'updatedAt'])
+          && isRoomOpen(roomId);
+
+        allow delete: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(voterId)
+          && (existing().uid == request.auth.uid || isRoomCreator(roomId));
+      }
+
+      // Subcollection: cards
+      match /cards/{cardId} {
+        allow get: if isSignedIn() && isValidId(roomId) && isValidId(cardId) && roomExists(roomId);
+        allow list: if isSignedIn() && resource.data.roomId == roomId;
+
+        allow create: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(cardId)
+          && isValidCustomCard(incoming())
+          && incoming().id == cardId
+          && incoming().roomId == roomId
+          && incoming().createdBy == request.auth.uid
+          && incoming().createdAt == request.time
+          && isRoomOpen(roomId);
+
+        allow update: if false;
+
+        allow delete: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(cardId)
+          && (existing().createdBy == request.auth.uid || isRoomCreator(roomId))
+          && isRoomOpen(roomId);
+      }
+
+      // Subcollection: swipes
+      match /swipes/{voterId} {
+        allow get: if isSignedIn() && isValidId(roomId) && isValidId(voterId) && roomExists(roomId);
+        allow list: if isSignedIn() && resource.data.roomId == roomId;
+
+        allow create: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(voterId)
+          && voterId == request.auth.uid
+          && isValidSwipeRecord(incoming())
+          && incoming().uid == request.auth.uid
+          && incoming().roomId == roomId
+          && incoming().updatedAt == request.time
+          && isRoomOpen(roomId);
+
+        allow update: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(voterId)
+          && voterId == request.auth.uid
+          && isValidSwipeRecord(incoming())
+          && existing().uid == request.auth.uid
+          && incoming().uid == existing().uid
+          && incoming().roomId == existing().roomId
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['choices', 'updatedAt'])
+          && isRoomOpen(roomId);
+
+        allow delete: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(voterId)
+          && (existing().uid == request.auth.uid || isRoomCreator(roomId));
+      }
+
+      // Subcollection: checklist
+      match /checklist/{itemId} {
+        allow get: if isSignedIn() && isValidId(roomId) && isValidId(itemId) && roomExists(roomId);
+        allow list: if isSignedIn() && resource.data.roomId == roomId;
+
+        allow create: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(itemId)
+          && isValidChecklistItem(incoming())
+          && incoming().id == itemId
+          && incoming().roomId == roomId
+          && incoming().createdBy == request.auth.uid
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && isRoomOpen(roomId);
+
+        allow update: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(itemId)
+          && isValidChecklistItem(incoming())
+          && incoming().id == existing().id
+          && incoming().roomId == existing().roomId
+          && incoming().createdBy == existing().createdBy
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'claimedByUid', 'claimedByName', 'updatedAt'
+          ])
+          && isRoomOpen(roomId)
+          && (
+            // Action 1: Claim an unclaimed item
+            ((!('claimedByUid' in existing()) || existing().claimedByUid == null)
+              && incoming().claimedByUid == request.auth.uid
+              && incoming().claimedByName is string
+              && incoming().claimedByName.size() >= 1)
+            ||
+            // Action 2: Unclaim own item or creator unclaims
+            ((existing().claimedByUid == request.auth.uid || isRoomCreator(roomId))
+              && incoming().claimedByUid == null
+              && incoming().claimedByName == null)
+          );
+
+        allow delete: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(itemId)
+          && (existing().createdBy == request.auth.uid || isRoomCreator(roomId))
+          && isRoomOpen(roomId);
+      }
+    }
+  }
+}

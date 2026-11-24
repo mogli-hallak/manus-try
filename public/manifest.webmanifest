@@ -1,0 +1,33 @@
+{
+  "id": "/",
+  "name": "נפגשים — תיאום מפגשים והחלטות קבוצתיות",
+  "short_name": "נפגשים",
+  "description": "אפליקציה לתיאום מפגשים קבוצתיים, החלקת כרטיסיות וחלוקת ציוד בזמן אמת.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "dir": "rtl",
+  "lang": "he",
+  "theme_color": "#1E3A5F",
+  "background_color": "#F7F8FA",
+  "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

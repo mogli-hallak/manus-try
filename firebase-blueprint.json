@@ -1,0 +1,805 @@
+{
+  "entities": {
+    "Room": {
+      "title": "Room",
+      "description": "A synchronized group meetup decision room.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "creatorId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "creatorName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "category": {
+          "type": "string",
+          "enum": ["food", "movie", "activity"]
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["full", "quick"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["open", "locked"]
+        },
+        "durationMinutes": {
+          "type": "number"
+        },
+        "endsAt": {
+          "type": "number"
+        },
+        "selectedTimeSlotId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "selectedCardId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "creatorId",
+        "creatorName",
+        "title",
+        "category",
+        "mode",
+        "status",
+        "durationMinutes",
+        "endsAt",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Participant": {
+      "title": "Participant",
+      "description": "A participant who joined a meetup room.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "roomId": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "initials": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4
+        },
+        "avatarTone": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "isGoogleUser": {
+          "type": "boolean"
+        },
+        "joinedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "lastSeenAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "uid",
+        "roomId",
+        "name",
+        "initials",
+        "avatarTone",
+        "isGoogleUser",
+        "joinedAt",
+        "lastSeenAt"
+      ]
+    },
+    "TimeOption": {
+      "title": "TimeOption",
+      "description": "A candidate day and time slot for the meetup.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "roomId": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "dateIso": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "startTime": {
+          "type": "string",
+          "maxLength": 10
+        },
+        "createdBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "roomId",
+        "label",
+        "dateIso",
+        "startTime",
+        "createdBy",
+        "createdAt"
+      ]
+    },
+    "TimeVote": {
+      "title": "TimeVote",
+      "description": "A participant's selected time option IDs.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "roomId": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "slotIds": {
+          "type": "array"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "roomId", "slotIds", "updatedAt"]
+    },
+    "CustomCard": {
+      "title": "CustomCard",
+      "description": "A custom idea card added to the swipe deck by a participant.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "roomId": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "category": {
+          "type": "string",
+          "enum": ["food", "movie", "activity"]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "subtitle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "metaTag": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "createdBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "createdByName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "roomId",
+        "category",
+        "title",
+        "subtitle",
+        "description",
+        "metaTag",
+        "createdBy",
+        "createdByName",
+        "createdAt"
+      ]
+    },
+    "SwipeRecord": {
+      "title": "SwipeRecord",
+      "description": "A participant's swipe scores keyed by card ID (0 skip, 1 like, 2 super-like).",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "roomId": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "choices": {
+          "type": "object"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "roomId", "choices", "updatedAt"]
+    },
+    "ChecklistItem": {
+      "title": "ChecklistItem",
+      "description": "An equipment or supply item in the meetup checklist.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "roomId": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "claimedByUid": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "claimedByName": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "createdBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "roomId",
+        "label",
+        "createdBy",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Private user profile and personal meetup preferences.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "bio": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "city": {
+          "type": "string",
+          "maxLength": 50
+        },
+        "friendCode": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 16,
+          "pattern": "^[A-Z0-9_\\-]+$"
+        },
+        "initials": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4
+        },
+        "avatarTone": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "defaultCategory": {
+          "type": "string",
+          "enum": ["food", "movie", "activity"]
+        },
+        "defaultDurationMinutes": {
+          "type": "number"
+        },
+        "notifyMeetingStarting": {
+          "type": "boolean"
+        },
+        "notifyDecisionFinalized": {
+          "type": "boolean"
+        },
+        "notifyChecklistAdded": {
+          "type": "boolean"
+        },
+        "showCityOnPublicCard": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "uid",
+        "displayName",
+        "bio",
+        "city",
+        "friendCode",
+        "initials",
+        "avatarTone",
+        "defaultCategory",
+        "defaultDurationMinutes",
+        "notifyMeetingStarting",
+        "notifyDecisionFinalized",
+        "notifyChecklistAdded",
+        "showCityOnPublicCard",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "PublicProfile": {
+      "title": "PublicProfile",
+      "description": "Shareable non-PII public friend card keyed by friendCode.",
+      "type": "object",
+      "properties": {
+        "friendCode": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 16,
+          "pattern": "^[A-Z0-9_\\-]+$"
+        },
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "initials": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4
+        },
+        "avatarTone": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "bio": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "city": {
+          "type": "string",
+          "maxLength": 50
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "friendCode",
+        "uid",
+        "displayName",
+        "initials",
+        "avatarTone",
+        "bio",
+        "city",
+        "updatedAt"
+      ]
+    },
+    "FriendRequest": {
+      "title": "FriendRequest",
+      "description": "Cross-user friend connection request.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "fromUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "fromName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "fromInitials": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4
+        },
+        "fromAvatarTone": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "fromFriendCode": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 16,
+          "pattern": "^[A-Z0-9_\\-]+$"
+        },
+        "toUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "toName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "toFriendCode": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 16,
+          "pattern": "^[A-Z0-9_\\-]+$"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "accepted", "declined"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "fromUid",
+        "fromName",
+        "fromInitials",
+        "fromAvatarTone",
+        "fromFriendCode",
+        "toUid",
+        "toName",
+        "toFriendCode",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SavedFriend": {
+      "title": "SavedFriend",
+      "description": "A user's saved friend entry for quick invitations and group building.",
+      "type": "object",
+      "properties": {
+        "ownerUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "friendUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "initials": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4
+        },
+        "avatarTone": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "friendCode": {
+          "type": "string",
+          "maxLength": 16
+        },
+        "nickname": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "favorite": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerUid",
+        "friendUid",
+        "displayName",
+        "initials",
+        "avatarTone",
+        "friendCode",
+        "nickname",
+        "favorite",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "FriendGroup": {
+      "title": "FriendGroup",
+      "description": "A persistent group of friends for recurring meetups.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "creatorId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "creatorName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "defaultCategory": {
+          "type": "string",
+          "enum": ["food", "movie", "activity"]
+        },
+        "memberUids": {
+          "type": "array"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "creatorId",
+        "creatorName",
+        "name",
+        "description",
+        "defaultCategory",
+        "memberUids",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "GroupMember": {
+      "title": "GroupMember",
+      "description": "A member inside a friend group subcollection.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "groupId": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "initials": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4
+        },
+        "avatarTone": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin", "member"]
+        },
+        "joinedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "uid",
+        "groupId",
+        "displayName",
+        "initials",
+        "avatarTone",
+        "role",
+        "joinedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/rooms/{roomId}": {
+      "schema": { "$ref": "#/entities/Room" },
+      "description": "Meetup room configuration, creatorId, status, and timer."
+    },
+    "/rooms/{roomId}/participants/{participantId}": {
+      "schema": { "$ref": "#/entities/Participant" },
+      "description": "Joined room members keyed by their Firebase Auth UID."
+    },
+    "/rooms/{roomId}/timeOptions/{slotId}": {
+      "schema": { "$ref": "#/entities/TimeOption" },
+      "description": "Proposed meetup day and time slots."
+    },
+    "/rooms/{roomId}/timeVotes/{voterId}": {
+      "schema": { "$ref": "#/entities/TimeVote" },
+      "description": "Selected time slot IDs per participant UID."
+    },
+    "/rooms/{roomId}/cards/{cardId}": {
+      "schema": { "$ref": "#/entities/CustomCard" },
+      "description": "Custom idea cards added to the room swipe deck."
+    },
+    "/rooms/{roomId}/swipes/{voterId}": {
+      "schema": { "$ref": "#/entities/SwipeRecord" },
+      "description": "Swipe decisions (0/1/2) per participant UID."
+    },
+    "/rooms/{roomId}/checklist/{itemId}": {
+      "schema": { "$ref": "#/entities/ChecklistItem" },
+      "description": "Shared meetup checklist items with atomic claim locking."
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private user profile and personal preferences, owner-scoped."
+    },
+    "/users/{userId}/friends/{friendId}": {
+      "schema": { "$ref": "#/entities/SavedFriend" },
+      "description": "Owner-scoped saved friends and quick contacts."
+    },
+    "/publicProfiles/{friendCode}": {
+      "schema": { "$ref": "#/entities/PublicProfile" },
+      "description": "Shareable non-PII public card lookup by friendCode."
+    },
+    "/friendRequests/{requestId}": {
+      "schema": { "$ref": "#/entities/FriendRequest" },
+      "description": "Peer-to-peer friend requests visible only to sender and recipient."
+    },
+    "/groups/{groupId}": {
+      "schema": { "$ref": "#/entities/FriendGroup" },
+      "description": "Shared friend groups with bounded memberUids for recurring meetups."
+    },
+    "/groups/{groupId}/members/{memberId}": {
+      "schema": { "$ref": "#/entities/GroupMember" },
+      "description": "Normalized member profiles for a friend group."
+    }
+  }
+}

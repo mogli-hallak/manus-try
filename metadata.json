@@ -1,0 +1,6 @@
+{
+  "name": "נפגשים — תיאום מפגשים והחלטות קבוצתיות",
+  "description": "אפליקציית מובייל בעברית לתיאום מפגשים קבוצתיים עם מנוע החלטות בהחלקת כרטיסיות, הצבעת זמנים, רשימת ציוד משותפת וסנכרון בזמן אמת.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
